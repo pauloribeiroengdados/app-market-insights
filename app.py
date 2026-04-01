@@ -6,6 +6,8 @@ import plotly.graph_objects as go
 from datetime import datetime
 from plotly.subplots import make_subplots
 import os
+import gdown
+import tempfile
 
 # ===== CONFIGURACAO =====
 # Caminho do logo
@@ -110,6 +112,29 @@ COR_PRI   = {
 }
 
 # ===== CAMINHOS DE REFERENCIA =====
+# IMPORTANTE: Para usar Google Drive, substitua os valores abaixo pelos IDs de seus arquivos no Google Drive
+# Como obter o ID de um arquivo no Google Drive:
+# 1. Abra o arquivo no Google Drive (ou pasta compartilhada)
+# 2. Clique em compartilhar e configure para qualquer pessoa com o link ter acesso
+# 3. Copie o link: https://drive.google.com/file/d/[ID]/view?usp=sharing ou https://drive.google.com/open?id=[ID]
+# 4. O [ID] é a string entre /d/ e /view (ou entre id= e &)
+# 
+# Exemplo:
+# GOOGLE_DRIVE_IDS = {
+#     'cnae': '1abc123ABC123...',  # ID do arquivo de CNAE
+#     'municipios': '2def456DEF456...',  # ID do arquivo de Municípios
+#     'reativacao': '3ghi789GHI789...',  # ID do arquivo de Reativação
+#     'prospeccao': '4jkl012JKL012...',  # ID do arquivo de Prospecção
+# }
+
+GOOGLE_DRIVE_IDS = {
+    'cnae': '194VIeJVoGY2oyWIg87WX7nvjfA0s5A56',  # ID do arquivo de CNAE
+    'municipios': '195UcY_1KaN_L_V2rCcHT_rj81j9ndBEu',  # ID do arquivo de Municípios
+    'reativacao': '1UMrLT0T2FZ54iMXcFMNa5JhWJJkqtohL',  # ID do arquivo de Reativação
+    'prospeccao': '1tUSYiZvsLaVZ70W5uNYzd3Kd4bnZ7ftO',  # ID do arquivo de Prospecção
+
+}  # Configure com seus IDs de Google Drive
+
 PATH_CNAE = "Public/Cnaes_Parquet/F.K03200$Z.D60214_1.CNAECSV.parquet"
 PATH_MUN  = "Public/DePara_Municipios/de_para_municipios.parquet"
 
@@ -140,24 +165,90 @@ def ofuscar_razao_social_grupo(df):
         df['Razao_Social'] = df['cnpj_basico'].astype(str).str[:4].apply(lambda x: f'Grupo {x}')
     return df
 
+# ===== FUNCOES DE GOOGLE DRIVE =====
+@st.cache_data
+def baixar_arquivo_gdrive(file_id, output_path=None):
+    """
+    Baixa um arquivo do Google Drive usando seu ID.
+    
+    Parâmetros:
+        file_id (str): ID do arquivo no Google Drive
+        output_path (str): Caminho onde salvar o arquivo (opcional). 
+                          Se não fornecido, salva em diretório temporário.
+    
+    Retorna:
+        str: Caminho do arquivo baixado, ou None se falhar
+    """
+    if not file_id:
+        return None
+    
+    try:
+        if output_path is None:
+            output_path = os.path.join(tempfile.gettempdir(), f"gdrive_{file_id}.parquet")
+        
+        # Verifica se arquivo já foi baixado
+        if os.path.exists(output_path):
+            return output_path
+        
+        url = f"https://drive.google.com/uc?id={file_id}&export=download"
+        gdown.download(url, output_path, quiet=True)
+        
+        if os.path.exists(output_path):
+            return output_path
+        else:
+            st.error(f"⚠️ Erro ao baixar arquivo do Google Drive (ID: {file_id})")
+            return None
+    except Exception as e:
+        st.error(f"⚠️ Erro ao conectar ao Google Drive: {str(e)}")
+        return None
+
+def carregar_arquivo_gdrive(file_id):
+    """Baixa e carrega um arquivo parquet do Google Drive com cache."""
+    caminho = baixar_arquivo_gdrive(file_id)
+    if caminho and os.path.exists(caminho):
+        try:
+            return pd.read_parquet(caminho)
+        except Exception as e:
+            st.error(f"⚠️ Erro ao ler arquivo: {str(e)}")
+            return pd.DataFrame()
+    return pd.DataFrame()
+
 # ===== ENRIQUECIMENTO =====
 @st.cache_data
-def carregar_referencias(data_path):
+def carregar_referencias(data_path, usar_gdrive=False):
     """Carrega tabelas de referência de CNAE e Município."""
     refs = {}
+    
+    # Carrega CNAE
     try:
-        df_cnae = pd.read_parquet(os.path.join(data_path, PATH_CNAE))
-        df_cnae['Codigo_CNAE'] = df_cnae['Codigo_CNAE'].astype(str).str.strip()
-        refs['cnae'] = df_cnae.set_index('Codigo_CNAE')['Descricao_CNAE'].to_dict()
-    except Exception:
+        if usar_gdrive and GOOGLE_DRIVE_IDS.get('cnae'):
+            df_cnae = carregar_arquivo_gdrive(GOOGLE_DRIVE_IDS['cnae'])
+        else:
+            caminho = os.path.join(data_path, PATH_CNAE)
+            df_cnae = pd.read_parquet(caminho) if os.path.exists(caminho) else pd.DataFrame()
+        
+        if not df_cnae.empty:
+            df_cnae['Codigo_CNAE'] = df_cnae['Codigo_CNAE'].astype(str).str.strip()
+            refs['cnae'] = df_cnae.set_index('Codigo_CNAE')['Descricao_CNAE'].to_dict()
+    except Exception as e:
+        st.warning(f"⚠️ Erro ao carregar referências de CNAE: {str(e)}")
         refs['cnae'] = {}
+    
+    # Carrega Municípios
     try:
-        df_mun = pd.read_parquet(os.path.join(data_path, PATH_MUN))
-        # Chave: nome em maiúsculas (como está nos parquets de scoring)
-        df_mun['_key'] = df_mun['codigo_municipio_rfb'].astype(str).str.strip().str.zfill(4)
-        refs['municipio'] = df_mun.drop_duplicates('_key').set_index('_key')['nome_municipio'].to_dict()
-    except Exception:
+        if usar_gdrive and GOOGLE_DRIVE_IDS.get('municipios'):
+            df_mun = carregar_arquivo_gdrive(GOOGLE_DRIVE_IDS['municipios'])
+        else:
+            caminho = os.path.join(data_path, PATH_MUN)
+            df_mun = pd.read_parquet(caminho) if os.path.exists(caminho) else pd.DataFrame()
+        
+        if not df_mun.empty:
+            df_mun['_key'] = df_mun['codigo_municipio_rfb'].astype(str).str.strip().str.zfill(4)
+            refs['municipio'] = df_mun.drop_duplicates('_key').set_index('_key')['nome_municipio'].to_dict()
+    except Exception as e:
+        st.warning(f"⚠️ Erro ao carregar referências de Municípios: {str(e)}")
         refs['municipio'] = {}
+    
     return refs
 
 def enriquecer(df, refs):
@@ -186,9 +277,31 @@ def enriquecer(df, refs):
 
 # ===== CARREGAR DADOS =====
 @st.cache_data
-def carregar_dados(caminho_reat, caminho_pros):
-    df_r = pd.read_parquet(caminho_reat) if os.path.exists(caminho_reat) else pd.DataFrame()
-    df_p = pd.read_parquet(caminho_pros) if os.path.exists(caminho_pros) else pd.DataFrame()
+def carregar_dados(caminho_reat, caminho_pros, usar_gdrive=False):
+    """Carrega dados de reativação e prospecção de arquivo local ou Google Drive."""
+    df_r = pd.DataFrame()
+    df_p = pd.DataFrame()
+    
+    # Carrega dados de reativação
+    try:
+        if usar_gdrive and GOOGLE_DRIVE_IDS.get('reativacao'):
+            df_r = carregar_arquivo_gdrive(GOOGLE_DRIVE_IDS['reativacao'])
+        else:
+            df_r = pd.read_parquet(caminho_reat) if os.path.exists(caminho_reat) else pd.DataFrame()
+    except Exception as e:
+        st.warning(f"⚠️ Erro ao carregar dados de reativação: {str(e)}")
+        df_r = pd.DataFrame()
+    
+    # Carrega dados de prospecção
+    try:
+        if usar_gdrive and GOOGLE_DRIVE_IDS.get('prospeccao'):
+            df_p = carregar_arquivo_gdrive(GOOGLE_DRIVE_IDS['prospeccao'])
+        else:
+            df_p = pd.read_parquet(caminho_pros) if os.path.exists(caminho_pros) else pd.DataFrame()
+    except Exception as e:
+        st.warning(f"⚠️ Erro ao carregar dados de prospecção: {str(e)}")
+        df_p = pd.DataFrame()
+    
     return df_r, df_p
 
 @st.cache_data
@@ -228,7 +341,7 @@ def gerar_dados_demo():
 
 # ===== SIDEBAR =====
 if os.path.exists(LOGO_PATH):
-    st.sidebar.image(LOGO_PATH, use_container_width=True)
+    st.sidebar.image(LOGO_PATH)
 else:
     st.sidebar.markdown(
         "<div style='background:#1F4E79;padding:14px;border-radius:8px;text-align:center;"
@@ -240,14 +353,18 @@ else:
 
 # ===== FONTES DE DADOS (oculto da sidebar — configurar diretamente no código) =====
 # Para conectar aos dados reais, defina os caminhos abaixo e altere usar_demo para False
+# Se quiser usar Google Drive, configure GOOGLE_DRIVE_IDS acima e defina usar_gdrive=True
+
 usar_demo    = False
+usar_gdrive  = True  # Altere para True se quiser carregar dados do Google Drive
 data_path    = "."
 caminho_reat = os.path.join(data_path, "ml_score_reativacao_top5.parquet")
 caminho_pros = os.path.join(data_path, "ml_score_prospeccao_top5.parquet")
 
 if not usar_demo:
-    df_reat, df_pros = carregar_dados(caminho_reat, caminho_pros)
+    df_reat, df_pros = carregar_dados(caminho_reat, caminho_pros, usar_gdrive=usar_gdrive)
     if df_reat.empty or df_pros.empty:
+        st.warning("⚠️ Dados de produção não encontrados. Usando dados de demonstração.")
         df_reat, df_pros = gerar_dados_demo()
         data_path = "."
 else:
@@ -259,7 +376,7 @@ df_reat = ofuscar_razao_social(df_reat)
 df_pros = ofuscar_razao_social(df_pros)
 
 # Enriquecimento com descrições de CNAE, Porte e Município
-_refs   = carregar_referencias(data_path) if not usar_demo else {'cnae': {}, 'municipio': {}}
+_refs   = carregar_referencias(data_path, usar_gdrive=usar_gdrive) if not usar_demo else {'cnae': {}, 'municipio': {}}
 df_reat = enriquecer(df_reat, _refs)
 df_pros = enriquecer(df_pros, _refs)
 
