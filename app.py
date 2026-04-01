@@ -729,8 +729,8 @@ def modal_cadastro(row):
 
     st.markdown(f"### {v('Razao_Social')}")
 
-    cnpj_str = str(v('cnpj')).zfill(14)
-    basico_str = str(v('cnpj_basico')).zfill(8)
+    cnpj_str = str(v('cnpj', ofusc=True )).zfill(14)
+    basico_str = str(v('cnpj_basico', ofusc=True)).zfill(8)
 
     cnpj_formatado = f"{cnpj_str[:2]}.{cnpj_str[2:5]}.{cnpj_str[5:8]}/{cnpj_str[8:12]}-{cnpj_str[12:]}"
     basico_formatado = f"{basico_str[:2]}.{basico_str[2:5]}.{basico_str[5:]}"
