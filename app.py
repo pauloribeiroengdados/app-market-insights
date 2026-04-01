@@ -731,14 +731,14 @@ def modal_cadastro(row):
 
     if cnpj_raw != '—':
         cnpj_digits = ''.join(filter(str.isdigit, cnpj_raw)).zfill(14)
-        cnpj_fmt = f"{cnpj_digits[:2]}.***.***/****-{cnpj_digits[12:14]}"
+        cnpj_fmt = f"{cnpj_digits[:2]}.***.***/****-{cnpj_digits[-2:]}"
     else:
         cnpj_fmt = '—'
     
-    # CNPJ Básico: garantir 8 dígitos numéricos antes de formatar
+    # CNPJ Básico: formato XX.XXX.XXX → XX.***.XXX
     if basico_raw != '—':
         basico_digits = ''.join(filter(str.isdigit, basico_raw)).zfill(8)
-        basico_fmt = f"{basico_digits[:2]}.***.**{basico_digits[6:8]}"
+        basico_fmt = f"{basico_digits[:2]}.***{basico_digits[-3:]}"
     else:
         basico_fmt = '—'
         
