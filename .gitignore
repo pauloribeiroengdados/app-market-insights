@@ -1,0 +1,8 @@
+"*.parquet" 
+"*.pkl" 
+"*.csv" 
+"__pycache__/" 
+".env" 
+".venv/"
+
+.venv/ 
