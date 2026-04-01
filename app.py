@@ -729,20 +729,19 @@ def modal_cadastro(row):
 
     st.markdown(f"### {v('Razao_Social')}")
 
-    cnpj_raw   = str(v('cnpj')).zfill(14)
-    basico_raw = str(v('cnpj_basico')).zfill(8)
-
-    cnpj_fmt = (
-        f"{cnpj_raw[:2]}.***.***/****-{cnpj_raw[12:]}"
-        if cnpj_raw != '—' else '—'
-    )
+    if cnpj_raw != '—':
+        cnpj_digits = ''.join(filter(str.isdigit, cnpj_raw)).zfill(14)
+        cnpj_fmt = f"{cnpj_digits[:2]}.***.***/****-{cnpj_digits[12:14]}"
+    else:
+        cnpj_fmt = '—'
     
-    # CNPJ Básico: XX.XXX.XXX → ofusca do 3º ao 6º dígito
-    basico_fmt = (
-        f"{basico_raw[:2]}.***. {basico_raw[6:]}"
-        if basico_raw != '—' else '—'
-    )
-
+    # CNPJ Básico: garantir 8 dígitos numéricos antes de formatar
+    if basico_raw != '—':
+        basico_digits = ''.join(filter(str.isdigit, basico_raw)).zfill(8)
+        basico_fmt = f"{basico_digits[:2]}.***.**{basico_digits[6:8]}"
+    else:
+        basico_fmt = '—'
+        
     st.markdown(f"**CNPJ:** '{cnpj_fmt}'  |  **CNPJ Básico:** '{basico_fmt}'")
     
     st.divider()
