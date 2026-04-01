@@ -728,7 +728,10 @@ def modal_cadastro(row):
         return "—"
 
     st.markdown(f"### {v('Razao_Social')}")
-
+    
+    cnpj_raw   = v('cnpj')
+    basico_raw = v('cnpj_basico')
+    
     if cnpj_raw != '—':
         cnpj_digits = ''.join(filter(str.isdigit, cnpj_raw)).zfill(14)
         cnpj_fmt = f"{cnpj_digits[:2]}.***.***/****-{cnpj_digits[12:14]}"
